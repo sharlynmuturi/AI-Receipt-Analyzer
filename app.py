@@ -65,14 +65,21 @@ reader = easyocr.Reader(["en"])
 def extract_words_boxes(image):
     results = reader.readtext(np.array(image))
     words, boxes = [], []
+    w, h = image.size
     for bbox, text, conf in results:
         if conf < 0.4:
             continue
         x0, y0 = bbox[0]
         x1, y1 = bbox[2]
-        # scale to LayoutLM expected 0-1000
-        w, h = image.size
-        box = [int(1000*x0/w), int(1000*y0/h), int(1000*x1/w), int(1000*y1/h)]
+
+        # Scale to 0-1000
+        x0_scaled = max(0, min(1000, int(1000 * x0 / w)))
+        y0_scaled = max(0, min(1000, int(1000 * y0 / h)))
+        x1_scaled = max(0, min(1000, int(1000 * x1 / w)))
+        y1_scaled = max(0, min(1000, int(1000 * y1 / h)))
+
+        box = [x0_scaled, y0_scaled, x1_scaled, y1_scaled]
+
         words.append(text)
         boxes.append(box)
     return words, boxes
