@@ -269,17 +269,9 @@ page = st.sidebar.selectbox("Select Page", ["Upload", "View & Query"])
 if page == "Upload":
     uploaded_file = st.file_uploader("Upload a receipt image", type=["jpg","png"])
     if uploaded_file:
-        image = Image.open(uploaded_file).convert("RGB")
-        
-        # Resize to max width/height while keeping aspect ratio
-        max_size = (1024, 1024) 
-        image.thumbnail(max_size)  # modifies image in place
-        st.image(image, caption="Uploaded Receipt (resized)", use_container_width=True)
-        
-        # Process the resized image
+        st.image(uploaded_file, caption="Uploaded Receipt", width=400)
         with st.spinner("Processing receipt..."):
-            fields, confidences = process_receipt(image)
-        
+            fields, confidences = process_receipt(uploaded_file)
         st.subheader("Extracted Fields")
         st.json(fields)
         st.subheader("Confidence Scores")
