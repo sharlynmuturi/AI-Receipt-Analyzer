@@ -284,20 +284,23 @@ if page == "Upload":
 
         # Display image
         image = Image.open(file_to_show)
-        st.image(image, caption="Uploaded Receipt", width=400)
 
-        # Process only if not yet processed
-        if "fields" not in st.session_state or "confidences" not in st.session_state:
-            with st.spinner("Processing receipt..."):
-                fields, confidences = process_receipt(file_to_show)
-                st.session_state["fields"] = fields
-                st.session_state["confidences"] = confidences
+        col1, col2 = st.columns([1, 1.5])
+        with col1:
+            st.image(image, caption="Uploaded Receipt", width=400)
+        with col2:
+            # Process only if not yet processed
+            if "fields" not in st.session_state or "confidences" not in st.session_state:
+                with st.spinner("Processing receipt..."):
+                    fields, confidences = process_receipt(file_to_show)
+                    st.session_state["fields"] = fields
+                    st.session_state["confidences"] = confidences
 
-        st.subheader("Extracted Fields")
-        st.json(st.session_state["fields"])
-        st.subheader("Confidence Scores")
-        st.dataframe(st.session_state["confidences"])
-        st.success("Receipt saved to database!")
+            st.subheader("Extracted Fields")
+            st.json(st.session_state["fields"])
+            st.subheader("Confidence Scores")
+            st.dataframe(st.session_state["confidences"])
+            st.success("Receipt saved to database!")
 
 # View & query page
 elif page == "View & Query":
