@@ -17,3 +17,5 @@ ipykernel
 sentence-transformers
 faiss-cpu
 groq
+
+easyocr
