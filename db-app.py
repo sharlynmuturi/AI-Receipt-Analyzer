@@ -295,14 +295,19 @@ page = st.sidebar.selectbox("Select Page", ["Upload", "View & Query"])
 if page == "Upload":
     uploaded_file = st.file_uploader("Upload a receipt image", type=["jpg","png"])
     if uploaded_file:
-        st.image(uploaded_file, caption="Uploaded Receipt", use_container_width=True)
-        with st.spinner("Processing receipt..."):
-            fields, confidences = process_receipt(uploaded_file)
-        st.subheader("Extracted Fields")
-        st.json(fields)
-        st.subheader("Confidence Scores")
-        st.dataframe(confidences)
-        st.success("Receipt saved to database!")
+        col1, col2 = st.columns([1, 1.5])
+        
+        with col1:
+            st.image(uploaded_file, caption="Uploaded Receipt", width=400)
+        with col2:
+
+            with st.spinner("Processing receipt..."):
+                fields, confidences = process_receipt(uploaded_file)
+            st.subheader("Extracted Fields")
+            st.json(fields)
+            st.subheader("Confidence Scores")
+            st.dataframe(confidences)
+            st.success("Receipt saved to database!")
 
 
 
