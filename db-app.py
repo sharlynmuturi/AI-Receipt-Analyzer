@@ -296,7 +296,7 @@ if page == "Upload":
     uploaded_file = st.file_uploader("Upload a receipt image", type=["jpg","png"])
     if uploaded_file:
         col1, col2 = st.columns([1, 1.5])
-        
+
         with col1:
             st.image(uploaded_file, caption="Uploaded Receipt", width=400)
         with col2:
@@ -350,7 +350,7 @@ elif page == "View & Query":
             df.to_csv("receipts_export.csv", index=False)
             st.success("CSV exported!")
 
-    st.subheader("Clear All Receipts")
-    confirm = st.text_input("Type YES to confirm deletion")
-    if st.button("Clear") and confirm == "YES":
-        clear_database()
+    # st.subheader("Clear All Receipts")
+    # confirm = st.text_input("Type YES to confirm deletion")
+    # if st.button("Clear") and confirm == "YES":
+        # clear_database()
