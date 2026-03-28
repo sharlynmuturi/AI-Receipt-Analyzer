@@ -53,14 +53,18 @@ model, processor = load_layoutlm()
 
 model.eval()
 
+@st.cache_resource
+def load_ocr():
+    return easyocr.Reader(["en"])
+
+reader = load_ocr()
+
 # Mapping from IDs to labels
 id2label = {0: "O", 1: "B-COMPANY", 2: "I-COMPANY", 3: "B-DATE", 4: "I-DATE",
             5: "B-TOTAL", 6: "I-TOTAL", 7: "B-ADDRESS", 8: "I-ADDRESS"}
 
 
 # OCR + extraction functions
-reader = easyocr.Reader(["en"])
-
 def extract_words_boxes(image):
     results = reader.readtext(np.array(image))
     words, boxes = [], []
@@ -173,9 +177,6 @@ def process_receipt(uploaded_file):
         "address": fields.get("ADDRESS")
     }
     add_to_index(new_row)
-
-    st.cache_data.clear()
-    st.cache_resource.clear()
     
     return fields, confidences
     
@@ -276,30 +277,36 @@ if page == "Upload":
     uploaded_file = st.file_uploader("Upload a receipt image", type=["jpg","png"])
 
     if uploaded_file:
-        st.session_state["uploaded_file"] = uploaded_file
+        # If it's a NEW file, reset session state
+        if "uploaded_file" not in st.session_state or uploaded_file.name != st.session_state["uploaded_file"].name:
+            st.session_state["uploaded_file"] = uploaded_file
+            st.session_state.pop("fields", None)
+            st.session_state.pop("confidences", None)
 
     if "uploaded_file" in st.session_state:
         file_to_show = st.session_state["uploaded_file"]
 
-        # Display image
         image = Image.open(file_to_show)
 
         col1, col2 = st.columns([1, 1.5])
+
         with col1:
             st.image(image, caption="Uploaded Receipt", width=400)
+
         with col2:
-            # Only process if not already processed
-            if "processed" not in st.session_state:
+            # Process only if fields not already computed
+            if "fields" not in st.session_state:
                 with st.spinner("Processing receipt..."):
                     fields, confidences = process_receipt(file_to_show)
                     st.session_state["fields"] = fields
                     st.session_state["confidences"] = confidences
-                    st.session_state["processed"] = True
 
             st.subheader("Extracted Fields")
-            st.json(st.session_state["fields"])
+            st.json(st.session_state.get("fields", {}))
+
             st.subheader("Confidence Scores")
-            st.dataframe(st.session_state["confidences"])
+            st.dataframe(st.session_state.get("confidences", {}))
+
             st.success("Receipt saved to database!")
 
 # View & query page
