@@ -13,8 +13,6 @@ import numpy as np
 import faiss
 from pathlib import Path
 
-from dotenv import load_dotenv
-load_dotenv()
 
 BASE_DIR = Path(__file__).parent
 MODEL_PATH = BASE_DIR / "artifacts" / "receipt_model"
@@ -223,7 +221,7 @@ def try_sql_answer(df, query):
     return None
 
 # LLM / RAG Query
-client = Groq(api_key=os.getenv("GROQ_API_KEY") or st.secrets["GROQ_API_KEY"])
+client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
 def ask_llm(query, retrieved_docs):
     # combine docs into context and return string
