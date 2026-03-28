@@ -19,3 +19,4 @@ faiss-cpu
 groq
 
 easyocr
+opencv-python-headless
