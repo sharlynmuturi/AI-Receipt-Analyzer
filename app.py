@@ -1,6 +1,5 @@
 import streamlit as st
 from PIL import Image
-import pytesseract
 import pandas as pd
 import json
 import torch
