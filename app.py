@@ -268,17 +268,27 @@ page = st.sidebar.selectbox("Select Page", ["Upload", "View & Query"])
 # Upload page
 if page == "Upload":
     uploaded_file = st.file_uploader("Upload a receipt image", type=["jpg","png"])
+    
     if uploaded_file:
-        st.image(uploaded_file, caption="Uploaded Receipt", width=400)
-        with st.spinner("Processing receipt..."):
-            fields, confidences = process_receipt(uploaded_file)
+        st.session_state["uploaded_file"] = uploaded_file
+    if "uploaded_file" in st.session_state:
+        file_to_show = st.session_state["uploaded_file"]
+        # resize with PIL
+        image = Image.open(file_to_show)
+        st.image(image, caption="Uploaded Receipt", width=400)
+        # Only process if not already processed
+        if "processed" not in st.session_state:
+            with st.spinner("Processing receipt..."):
+                fields, confidences = process_receipt(file_to_show)
+                st.session_state["fields"] = fields
+                st.session_state["confidences"] = confidences
+                st.session_state["processed"] = True
+
         st.subheader("Extracted Fields")
-        st.json(fields)
+        st.json(st.session_state["fields"])
         st.subheader("Confidence Scores")
-        st.dataframe(confidences)
+        st.dataframe(st.session_state["confidences"])
         st.success("Receipt saved to database!")
-
-
 
 # View & query page
 elif page == "View & Query":
