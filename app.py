@@ -12,6 +12,7 @@ from groq import Groq
 import numpy as np
 import faiss
 from pathlib import Path
+import easyocr
 
 
 BASE_DIR = Path(__file__).parent
@@ -59,20 +60,19 @@ id2label = {0: "O", 1: "B-COMPANY", 2: "I-COMPANY", 3: "B-DATE", 4: "I-DATE",
 
 
 # OCR + extraction functions
-def extract_words_boxes(image):
-    data = pytesseract.image_to_data(image, output_type=pytesseract.Output.DICT)
-    words, boxes = [], []
-    w, h = image.size
+reader = easyocr.Reader(["en"])
 
-    for i, text in enumerate(data["text"]):
-        text = text.strip()
-        if not text:
+def extract_words_boxes(image):
+    results = reader.readtext(np.array(image))
+    words, boxes = [], []
+    for bbox, text, conf in results:
+        if conf < 0.4:
             continue
-        conf = int(data["conf"][i])
-        if conf < 40:
-            continue
-        x, y, bw, bh = data["left"][i], data["top"][i], data["width"][i], data["height"][i]
-        box = [int(1000 * x / w), int(1000 * y / h), int(1000 * (x+bw) / w), int(1000 * (y+bh) / h)]
+        x0, y0 = bbox[0]
+        x1, y1 = bbox[2]
+        # scale to LayoutLM expected 0-1000
+        w, h = image.size
+        box = [int(1000*x0/w), int(1000*y0/h), int(1000*x1/w), int(1000*y1/h)]
         words.append(text)
         boxes.append(box)
     return words, boxes
