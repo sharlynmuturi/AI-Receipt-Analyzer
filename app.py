@@ -26,7 +26,6 @@ CSV_PATH = BASE_DIR / "artifacts" / "extracted_receipts.csv"
 st.set_page_config(page_title="AI Receipt Analyzer", layout="wide")
 st.title("AI Receipt Analyzer")
 
-@st.cache_data
 def load_receipts_df():
     if CSV_PATH.exists():
         return pd.read_csv(CSV_PATH)
@@ -161,16 +160,17 @@ def extract_items_llm(lines):
     context = "\n".join(lines)
     
     prompt = f"""
-Extract all items and their prices from this receipt.
+Extract all purchased items and the **total amount paid per item** from this receipt.
 
 Rules:
 - Ignore totals, tax, change
-- Only return actual purchased items
-- Price must be a number
+- If a line shows quantity x unit_price, calculate the total = quantity * unit_price
+- Return only actual purchased items
+- Price must be the amount paid for that line, not the unit price
 
 Return ONLY valid JSON:
 [
-  {{"item": "Milk", "price": 120}},
+  {{"item": "Milk", "price": 240}},
   {{"item": "Bread", "price": 80}}
 ]
 
