@@ -26,6 +26,7 @@ CSV_PATH = BASE_DIR / "artifacts" / "extracted_receipts.csv"
 st.set_page_config(page_title="AI Receipt Analyzer", layout="wide")
 st.title("AI Receipt Analyzer")
 
+@st.cache_resource
 def load_receipts_df():
     if CSV_PATH.exists():
         return pd.read_csv(CSV_PATH)
@@ -158,17 +159,18 @@ def lines_to_text(lines):
 
 def extract_items_llm(lines):
     context = "\n".join(lines)
-    
+
     prompt = f"""
 Extract all purchased items and the **total amount paid per item** from this receipt.
 
 Rules:
 - Ignore totals, tax, change
-- If a line shows quantity x unit_price, calculate the total = quantity * unit_price
-- Return only actual purchased items
-- Price must be the amount paid for that line, not the unit price
+- If a line shows quantity x unit_price, calculate total = quantity * unit_price
+- Return ONLY purchased items
+- Price must be total paid for that item
+- Return STRICT JSON (no explanation)
 
-Return ONLY valid JSON:
+Example:
 [
   {{"item": "Milk", "price": 240}},
   {{"item": "Bread", "price": 80}}
@@ -189,13 +191,17 @@ Receipt:
 
     response_text = completion.choices[0].message.content
 
-    # Try parsing JSON
     try:
         data = json.loads(response_text)
-        return data
+
+        # Ensure it's a list
+        if isinstance(data, list):
+            return data
+        else:
+            return []
+
     except:
-        print("JSON parsing failed, returning raw output")
-        return response_text
+        return []
 
 
 def save_receipts_df(df):
@@ -234,7 +240,6 @@ def process_receipt(uploaded_file):
     line_texts = lines_to_text(lines)
 
     items = extract_items_llm(line_texts)
-    items_df = pd.DataFrame(items)
 
     encoding = processor(
         image,
