@@ -161,20 +161,28 @@ def extract_items_llm(lines):
     context = "\n".join(lines)
 
     prompt = f"""
-Extract all purchased items and the **total amount paid per item** from this receipt.
+You are extracting structured data from a receipt.
 
-Rules:
-- Ignore totals, tax, change
-- If a line shows quantity x unit_price, calculate total = quantity * unit_price
-- Return ONLY purchased items
-- Price must be total paid for that item
-- Return STRICT JSON (no explanation)
+TASK:
+Extract every purchased item from the receipt.
 
-Example:
+RULES:
+ - Ignore totals, subtotal, tax, change, balance, discounts
+ - Price must be total paid for that item. If a line shows quantity x unit_price, calculate total = quantity * unit_price
+ - Return only purchased items   
+ - The number of extracted items should match the number of item lines
+ - Do not skip any items or merge similar items
+ - Return strict JSON (no explanation)
+
 [
   {{"item": "Milk", "price": 240}},
   {{"item": "Bread", "price": 80}}
 ]
+
+VALIDATION BEFORE RETURNING:
+- Ensure no item lines are missing
+- Ensure duplicate-priced items are NOT removed
+- Ensure each row is a real purchased item
 
 Receipt:
 {context}
