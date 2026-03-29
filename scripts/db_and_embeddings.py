@@ -19,13 +19,14 @@ EVAL_PATH = BASE_DIR / "receipts" / "eval"
 EVAL_IMG_PATH = EVAL_PATH / "img"
 EVAL_LABEL_PATH = EVAL_PATH / "entities"
 
-MODEL_PATH = BASE_DIR / "artifacts" / "receipt_model"
+MODEL_PATH = (BASE_DIR / "artifacts" / "receipt_model").resolve()
 EXTRACTED_CSV = BASE_DIR / "artifacts" / "extracted_receipts.csv"
 EMBEDDINGS_PATH = BASE_DIR / "artifacts" / "doc_embeddings.npy"
 INDEX_PATH = BASE_DIR / "artifacts" / "faiss.index"
 
-model = LayoutLMv3ForTokenClassification.from_pretrained(MODEL_PATH)
-processor = LayoutLMv3Processor.from_pretrained(MODEL_PATH)
+model = LayoutLMv3ForTokenClassification.from_pretrained(MODEL_PATH, local_files_only=True, from_tf=False, from_flax=False)
+processor = LayoutLMv3Processor.from_pretrained(MODEL_PATH, local_files_only=True)
+
 model.eval()
 
 # Database setup
@@ -36,6 +37,7 @@ cursor.execute("DROP TABLE IF EXISTS receipts")
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS receipts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    file_name TEXT,
     company TEXT,
     date TEXT,
     total REAL,
@@ -93,11 +95,12 @@ def extract_fields_with_confidence(tokens, labels, scores):
         confidences[current_field] = sum(buffer_scores)/len(buffer_scores)
     return results, confidences
 
-def save_to_db(fields, confidences):
+def save_to_db(fields, confidences, file_name):
     cursor.execute("""
-    INSERT INTO receipts (company, date, total, address, confidence_json, raw_json)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO receipts (file_name, company, date, total, address, confidence_json, raw_json)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
     """, (
+        str(file_name),  # ✅ store file name
         clean_company(fields.get("COMPANY")),
         clean_date(fields.get("DATE")),
         clean_total(fields.get("TOTAL")),
@@ -141,7 +144,7 @@ def process_receipt(img_path):
         prev_word_id = word_id
 
     fields, confidences = extract_fields_with_confidence(final_tokens, final_labels, final_scores)
-    save_to_db(fields, confidences)
+    save_to_db(fields, confidences, img_path.name)
     return fields
 
 # Run extraction
@@ -156,6 +159,7 @@ df.to_csv(EXTRACTED_CSV, index=False)
 # Build embeddings + FAISS
 documents = df.apply(lambda row: f"""
 Receipt:
+- File: {row['file_name']}
 - Company: {row['company']}
 - Date: {row['date']}
 - Total: {row['total']} KES

@@ -32,7 +32,7 @@ def load_receipts_df():
         return pd.read_csv(CSV_PATH)
     else:
         # Return empty dataframe with correct columns
-        return pd.DataFrame(columns=["id","company","date","total","address","confidence_json","raw_json"])
+        return pd.DataFrame(columns=["id","file_name","company","date","total","address","items_json","confidence_json","raw_json"])
 
 @st.cache_resource
 def load_embed_model():
@@ -115,23 +115,109 @@ def extract_fields_with_confidence(tokens, labels, scores):
         confidences[current_field] = sum(buffer_scores)/len(buffer_scores)
     return results, confidences
 
+# Group Words into Lines
+def group_into_lines(words, boxes, y_threshold=10):
+    data = list(zip(words, boxes))
+    
+    # Sort top to bottom
+    data.sort(key=lambda x: x[1][1])
+    
+    lines = []
+    current_line = []
+    
+    for word, box in data:
+        y = box[1]
+        
+        if not current_line:
+            current_line.append((word, box))
+            continue
+        
+        prev_y = current_line[-1][1][1]
+        
+        if abs(y - prev_y) < y_threshold:
+            current_line.append((word, box))
+        else:
+            lines.append(current_line)
+            current_line = [(word, box)]
+    
+    if current_line:
+        lines.append(current_line)
+    
+    return lines
+
+# Convert Lines to Text
+def lines_to_text(lines):
+    line_texts = []
+    
+    for line in lines:
+        # Sort left → right
+        line = sorted(line, key=lambda x: x[1][0])
+        text = " ".join([w for w, _ in line])
+        line_texts.append(text)
+    
+    return line_texts
+
+def extract_items_llm(lines):
+    context = "\n".join(lines)
+    
+    prompt = f"""
+Extract all items and their prices from this receipt.
+
+Rules:
+- Ignore totals, tax, change
+- Only return actual purchased items
+- Price must be a number
+
+Return ONLY valid JSON:
+[
+  {{"item": "Milk", "price": 120}},
+  {{"item": "Bread", "price": 80}}
+]
+
+Receipt:
+{context}
+"""
+
+    completion = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[
+            {"role": "system", "content": "You extract structured data from receipts."},
+            {"role": "user", "content": prompt}
+        ],
+        temperature=0
+    )
+
+    response_text = completion.choices[0].message.content
+
+    # Try parsing JSON
+    try:
+        data = json.loads(response_text)
+        return data
+    except:
+        print("JSON parsing failed, returning raw output")
+        return response_text
+
 
 def save_receipts_df(df):
     df.to_csv(CSV_PATH, index=False)
 
 
-def save_receipt_to_csv(fields, confidences):
+def save_receipt_to_csv(fields, confidences, items, file_name):
     df = load_receipts_df()
     new_id = 1 if df.empty else df["id"].max() + 1
+
     new_row = {
         "id": new_id,
+        "file_name": file_name,
         "company": fields.get("COMPANY"),
         "date": fields.get("DATE"),
         "total": fields.get("TOTAL"),
         "address": fields.get("ADDRESS"),
+        "items_json": json.dumps(items),
         "confidence_json": json.dumps(confidences),
         "raw_json": json.dumps(fields)
     }
+
     df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
     save_receipts_df(df)
 
@@ -139,7 +225,16 @@ def save_receipt_to_csv(fields, confidences):
 # Receipt processing
 def process_receipt(uploaded_file):
     image = Image.open(uploaded_file).convert("RGB")
+
+    file_name = uploaded_file.name
+
     words, boxes = extract_words_boxes(image)
+
+    lines = group_into_lines(words, boxes)
+    line_texts = lines_to_text(lines)
+
+    items = extract_items_llm(line_texts)
+    items_df = pd.DataFrame(items)
 
     encoding = processor(
         image,
@@ -171,26 +266,40 @@ def process_receipt(uploaded_file):
 
     fields, confidences = extract_fields_with_confidence(final_tokens, final_labels, final_scores)
 
-    save_receipt_to_csv(fields, confidences)
+    save_receipt_to_csv(fields, confidences, items, file_name)
     
     # Add to FAISS index
+
     new_row = {
+        "file_name": file_name,
         "company": fields.get("COMPANY"),
         "date": fields.get("DATE"),
         "total": fields.get("TOTAL"),
-        "address": fields.get("ADDRESS")
+        "address": fields.get("ADDRESS"),
+        "items": items
     }
+
     add_to_index(new_row)
     
-    return fields, confidences
-    
+    return fields, confidences, items
+
 def row_to_text(row):
+    items = row.get("items", [])
+    
+    items_text = "\n".join([
+        f"- {i.get('item')} ({i.get('price')})"
+        for i in items
+    ]) if isinstance(items, list) else ""
+    
     return f"""
     Receipt:
-    - Company: {row['company']}
-    - Date: {row['date']}
-    - Total: {row['total']} KES
-    - Address: {row['address']}
+    - File: {row.get('file_name', 'N/A')}
+    - Company: {row.get('company', 'N/A')}
+    - Date: {row.get('date', 'N/A')}
+    - Total: {row.get('total', 'N/A')}
+    - Address: {row.get('address', 'N/A')}
+    - Items:
+    {items_text}
     """
 
 def retrieve(query, df, k=5):
@@ -232,7 +341,8 @@ def try_sql_answer(df, query):
     return None
 
 # LLM / RAG Query
-client = Groq(api_key=st.secrets["GROQ_API_KEY"] or os.getenv("GROQ_API_KEY"))
+# client = Groq(api_key=st.secrets["GROQ_API_KEY"] or os.getenv("GROQ_API_KEY"))
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 def ask_llm(query, retrieved_docs):
     # combine docs into context and return string
@@ -301,15 +411,25 @@ if page == "Upload":
             # Process only if fields not already computed
             if "fields" not in st.session_state:
                 with st.spinner("Processing receipt..."):
-                    fields, confidences = process_receipt(file_to_show)
+                    fields, confidences, items = process_receipt(file_to_show)
                     st.session_state["fields"] = fields
                     st.session_state["confidences"] = confidences
+                    st.session_state["items"] = items
 
-            st.subheader("Extracted Fields")
-            st.json(st.session_state.get("fields", {}))
+            st.markdown(f"""
+            ### Receipt Summary
 
-            st.subheader("Confidence Scores")
-            st.dataframe(st.session_state.get("confidences", {}))
+            - **File:** {file_to_show.name}  
+            - **Company:** {st.session_state['fields'].get('COMPANY', 'N/A')}  
+            - **Date:** {st.session_state['fields'].get('DATE', 'N/A')}  
+            - **Total:** {st.session_state['fields'].get('TOTAL', 'N/A')}  
+            """)
+
+            if "items" in st.session_state:
+                st.dataframe(pd.DataFrame(st.session_state["items"]))
+
+            with st.expander("Confidence Scores"):
+                st.dataframe(st.session_state.get("confidences", {}))
 
             st.success("Receipt saved to database!")
 
