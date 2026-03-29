@@ -217,4 +217,6 @@ artifacts/encoded_train_receipts_dataset
 
 notebooks/layoutlmv3_receipts
 notebooks/mlflow
-notebooks/receipts
+notebooks/receipts.db
+
+scripts/receipts.db

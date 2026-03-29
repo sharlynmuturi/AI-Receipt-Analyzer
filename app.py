@@ -332,7 +332,7 @@ def try_sql_answer(df, query):
     
     if "most" in q and "company" in q:
         result = df.groupby("company")["total"].sum().idxmax()
-        return f"You spent the most at {result}"
+        return f"The most amount was spent at {result}"
     
     if "total spent" in q:
         total = df["total"].sum()
@@ -384,14 +384,14 @@ Answer clearly and concisely.
     
 # Streamlit app
 
-page = st.sidebar.selectbox("Select Page", ["Upload", "View & Query"])
+page = st.sidebar.selectbox("Select Page", ["Upload", "View & Query", "Items"])
 
 # Upload page
 if page == "Upload":
     uploaded_file = st.file_uploader("Upload a receipt image", type=["jpg","png"])
 
     if uploaded_file:
-        # If it's a NEW file, reset session state
+        # Reset session state if new file
         if "uploaded_file" not in st.session_state or uploaded_file.name != st.session_state["uploaded_file"].name:
             st.session_state["uploaded_file"] = uploaded_file
             st.session_state.pop("fields", None)
@@ -472,3 +472,52 @@ elif page == "View & Query":
         if st.button("Export CSV"):
             df.to_csv("receipts_export.csv", index=False)
             st.success("CSV exported!")
+
+# Items Page
+elif page == "Items":
+    st.subheader("Extracted Items from Receipts")
+    df = load_receipts_df()
+
+    if df.empty:
+        st.info("No receipts found. Upload some first!")
+    else:
+        # Flatten items_json into individual rows safely
+        all_items_rows = []
+
+        for _, row in df.iterrows():
+            items = []
+            try:
+                items = json.loads(row.get("items_json", "[]"))
+            except:
+                pass
+
+            company = row.get("company") or "Unknown"
+            date = row.get("date") or "Unknown"
+            file_name = row.get("file_name") or "Unknown"
+
+            for item in items:
+                all_items_rows.append({
+                    "Receipt File": file_name,
+                    "Company": company,
+                    "Date": date,
+                    "Item": item.get("item", "Unknown"),
+                    "Price": item.get("price", "Unknown")
+                })
+
+        if not all_items_rows:
+            st.info("No items extracted yet. Upload receipts first!")
+        else:
+            items_df = pd.DataFrame(all_items_rows)
+
+            # filter by company
+            company_options = ["All"] + sorted(items_df["Company"].dropna().unique())
+            company_filter = st.selectbox("Filter by Company", company_options)
+
+            if company_filter != "All":
+                items_df = items_df[items_df["Company"] == company_filter]
+
+            st.dataframe(items_df, use_container_width=True)
+
+            if st.button("Export Items CSV"):
+                items_df.to_csv("extracted_items.csv", index=False)
+                st.success("Items exported successfully!")

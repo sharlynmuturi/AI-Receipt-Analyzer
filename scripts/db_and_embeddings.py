@@ -100,7 +100,7 @@ def save_to_db(fields, confidences, file_name):
     INSERT INTO receipts (file_name, company, date, total, address, confidence_json, raw_json)
     VALUES (?, ?, ?, ?, ?, ?, ?)
     """, (
-        str(file_name),  # ✅ store file name
+        str(file_name), 
         clean_company(fields.get("COMPANY")),
         clean_date(fields.get("DATE")),
         clean_total(fields.get("TOTAL")),
